@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CallCenter xmlns="http://soap.sforce.com/2006/04/metadata">
+    <adapterUrl>/resource/MCubeBridge/bridge/mcube_bridge.html</adapterUrl>
+    <contactRecordGroup>false</contactRecordGroup>
+    <customSettings>
+        <value>https://api.mcube.in</value>
+        <name>MCube API URL</name>
+    </customSettings>
+    <displayName>MCube CTI Adapter POC</displayName>
+    <internalName>MCubeSoftphonePOC</internalName>
+    <softphoneLayout>Default</softphoneLayout>
+</CallCenter>
