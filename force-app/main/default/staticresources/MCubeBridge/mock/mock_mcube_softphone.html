@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCube Softphone</title>
+  <style>
+    /* ── Reset & base ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1e2128;
+      color: #e8eaed;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    .sf-header {
+      background: #16181d;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2d3139;
+      flex-shrink: 0;
+    }
+    .sf-header .logo { font-weight: 700; font-size: .95rem; color: #1a73e8; letter-spacing: .5px; }
+    .sf-header .version { font-size: .7rem; color: #5f6368; }
+
+    /* ── Agent status badge ──────────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: .75rem;
+      font-weight: 600;
+      transition: background .3s, color .3s;
+      user-select: none;
+    }
+    .status-badge.available { background: #1a3a1a; color: #34a853; }
+    .status-badge.busy      { background: #3a1a1a; color: #ea4335; }
+    .status-badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── Main content area ───────────────────────────────────────── */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+
+    /* ── Idle state ──────────────────────────────────────────────── */
+    .state-idle .idle-icon { font-size: 3rem; margin-bottom: 12px; }
+    .state-idle .idle-text { color: #9aa0a6; font-size: .9rem; }
+
+    /* ── Ringing state ───────────────────────────────────────────── */
+    .state-ringing .ring-icon {
+      font-size: 3.5rem;
+      animation: pulse 1s ease-in-out infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1);   opacity: 1; }
+      50%       { transform: scale(1.2); opacity: .7; }
+    }
+    .state-ringing .ring-label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #fbbc04;
+      margin-bottom: 4px;
+    }
+    .state-ringing .ring-number {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #e8eaed;
+      margin-bottom: 18px;
+    }
+    .btn-row { display: flex; gap: 12px; justify-content: center; }
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn-answer  { background: #34a853; color: #fff; }
+    .btn-reject  { background: #ea4335; color: #fff; }
+    .btn:hover   { opacity: .85; }
+
+    /* ── On-call state ───────────────────────────────────────────── */
+    .state-oncall .oncall-icon { font-size: 3rem; margin-bottom: 8px; }
+    .state-oncall .oncall-label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #34a853;
+      margin-bottom: 4px;
+    }
+    .state-oncall .oncall-number { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+    .state-oncall .timer { font-size: 1.6rem; font-variant-numeric: tabular-nums; color: #8ab4f8; }
+
+    /* ── Outbound state ──────────────────────────────────────────── */
+    .state-outbound .out-icon { font-size: 3rem; margin-bottom: 8px; }
+    .state-outbound .out-label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #1a73e8;
+      margin-bottom: 4px;
+    }
+    .state-outbound .out-number { font-size: 1.3rem; font-weight: 700; }
+
+    /* ── Hidden helper ───────────────────────────────────────────── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<!-- Header with logo + agent status -->
+<div class="sf-header">
+  <div>
+    <div class="logo">MCube Softphone</div>
+    <div class="version">POC v1.0</div>
+  </div>
+  <div id="statusBadge" class="status-badge available">
+    <span class="dot"></span>
+    <span id="statusText">Available</span>
+  </div>
+</div>
+
+<!-- ── Idle UI ──────────────────────────────────────────────────── -->
+<div id="stateIdle" class="content state-idle">
+  <div class="idle-icon">☎️</div>
+  <div class="idle-text">Waiting for calls…</div>
+</div>
+
+<!-- ── Ringing UI ───────────────────────────────────────────────── -->
+<div id="stateRinging" class="content state-ringing hidden">
+  <div class="ring-icon">📲</div>
+  <div class="ring-label">Incoming Call</div>
+  <div class="ring-number" id="ringNumber">—</div>
+  <div class="btn-row">
+    <button class="btn btn-answer" onclick="answerCall()">✅ Answer</button>
+    <button class="btn btn-reject" onclick="rejectCall()">❌ Reject</button>
+  </div>
+</div>
+
+<!-- ── On-Call UI ────────────────────────────────────────────────── -->
+<div id="stateOncall" class="content state-oncall hidden">
+  <div class="oncall-icon">📞</div>
+  <div class="oncall-label">On Call</div>
+  <div class="oncall-number" id="oncallNumber">—</div>
+  <div class="timer" id="callTimer">00:00</div>
+</div>
+
+<!-- ── Outbound UI ───────────────────────────────────────────────── -->
+<div id="stateOutbound" class="content state-outbound hidden">
+  <div class="out-icon">📤</div>
+  <div class="out-label">Dialing…</div>
+  <div class="out-number" id="outNumber">—</div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────
+  let currentCallId     = null;
+  let currentCallerNum  = null;
+  let callTimerInterval = null;
+  let callSeconds       = 0;
+
+  // ── BroadcastChannel — receive events from mock_event_trigger.html ──
+  const channel = new BroadcastChannel('mcube_channel');
+
+  channel.onmessage = function (evt) {
+    const data = evt.data;
+    if (!data || !data.event) return;
+
+    switch (data.event) {
+      case 'INCOMING_CALL':
+        handleIncomingCall(data);
+        break;
+
+      case 'CALL_ENDED':
+        handleCallEnded(data);
+        break;
+
+      case 'CALL_REJECTED':
+        // External rejection (e.g., caller hung up before agent answered)
+        handleExternalReject(data);
+        break;
+
+      case 'AGENT_STATUS_CHANGED':
+        handleAgentStatus(data);
+        break;
+
+      default:
+        // Unknown event — ignore silently
+        break;
+    }
+  };
+
+  // ── postMessage — receive commands from parent bridge ──────────────
+  window.addEventListener('message', function (evt) {
+    const data = evt.data;
+    if (!data || !data.action) return;
+
+    if (data.action === 'MAKE_CALL' && data.number) {
+      showOutbound(data.number);
+    }
+  });
+
+  // ── Event handlers ─────────────────────────────────────────────────
+
+  /** Called when an INCOMING_CALL event arrives via BroadcastChannel. */
+  function handleIncomingCall(data) {
+    currentCallId    = data.callId;
+    currentCallerNum = data.callerNumber;
+
+    // Update ringing UI
+    document.getElementById('ringNumber').textContent = data.callerNumber;
+    showState('ringing');
+
+    // Notify parent bridge (Salesforce Open CTI layer)
+    postToParent({
+      event: 'INCOMING_CALL',
+      callerNumber: data.callerNumber,
+      callId: data.callId
+    });
+  }
+
+  /** User clicked "Answer" button. */
+  function answerCall() {
+    document.getElementById('oncallNumber').textContent = currentCallerNum || '—';
+    showState('oncall');
+    startTimer();
+
+    postToParent({
+      event: 'CALL_ACCEPTED',
+      callerNumber: currentCallerNum,
+      callId: currentCallId
+    });
+  }
+
+  /** User clicked "Reject" button. */
+  function rejectCall() {
+    postToParent({
+      event: 'CALL_REJECTED',
+      callerNumber: currentCallerNum,
+      callId: currentCallId
+    });
+
+    resetCall();
+    showState('idle');
+  }
+
+  /** BroadcastChannel fired CALL_ENDED (remote hangup). */
+  function handleCallEnded(data) {
+    postToParent({
+      event: 'CALL_ENDED',
+      callerNumber: data.callerNumber || currentCallerNum,
+      callId: data.callId || currentCallId,
+      duration: data.duration || callSeconds
+    });
+
+    resetCall();
+    showState('idle');
+  }
+
+  /** BroadcastChannel fired CALL_REJECTED (caller cancelled before answer). */
+  function handleExternalReject(data) {
+    postToParent({
+      event: 'CALL_REJECTED',
+      callerNumber: data.callerNumber || currentCallerNum,
+      callId: data.callId || currentCallId
+    });
+
+    resetCall();
+    showState('idle');
+  }
+
+  /** BroadcastChannel fired AGENT_STATUS_CHANGED. */
+  function handleAgentStatus(data) {
+    updateStatusBadge(data.status);
+
+    postToParent({
+      event: 'AGENT_STATUS_CHANGED',
+      status: data.status
+    });
+  }
+
+  /** Show outbound dialling UI (triggered via click-to-dial from bridge). */
+  function showOutbound(number) {
+    document.getElementById('outNumber').textContent = number;
+    showState('outbound');
+
+    postToParent({
+      event: 'OUTBOUND_CALL_INITIATED',
+      callerNumber: number
+    });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Posts a message to the parent frame (mcube_bridge.html).
+   * Safe to call even when not inside an iframe.
+   */
+  function postToParent(payload) {
+    try {
+      window.parent.postMessage(payload, '*');
+    } catch (e) {
+      // Silently ignore cross-origin errors in standalone testing
+    }
+  }
+
+  /**
+   * Switches visible UI panel.
+   * @param {'idle'|'ringing'|'oncall'|'outbound'} state
+   */
+  function showState(state) {
+    document.getElementById('stateIdle').classList.add('hidden');
+    document.getElementById('stateRinging').classList.add('hidden');
+    document.getElementById('stateOncall').classList.add('hidden');
+    document.getElementById('stateOutbound').classList.add('hidden');
+
+    const map = {
+      idle:     'stateIdle',
+      ringing:  'stateRinging',
+      oncall:   'stateOncall',
+      outbound: 'stateOutbound'
+    };
+    if (map[state]) {
+      document.getElementById(map[state]).classList.remove('hidden');
+    }
+  }
+
+  /** Clears call state and stops timer. */
+  function resetCall() {
+    currentCallId    = null;
+    currentCallerNum = null;
+    stopTimer();
+  }
+
+  /** Updates the agent status badge in the header. */
+  function updateStatusBadge(status) {
+    const badge = document.getElementById('statusBadge');
+    const text  = document.getElementById('statusText');
+
+    text.textContent = status;
+
+    badge.classList.remove('available', 'busy');
+    if (status === 'Available') {
+      badge.classList.add('available');
+    } else {
+      badge.classList.add('busy');
+    }
+  }
+
+  // ── Call timer ─────────────────────────────────────────────────────
+
+  function startTimer() {
+    callSeconds = 0;
+    updateTimerDisplay();
+    callTimerInterval = setInterval(function () {
+      callSeconds++;
+      updateTimerDisplay();
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (callTimerInterval) {
+      clearInterval(callTimerInterval);
+      callTimerInterval = null;
+    }
+    callSeconds = 0;
+    updateTimerDisplay();
+  }
+
+  function updateTimerDisplay() {
+    const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+    const s = String(callSeconds % 60).padStart(2, '0');
+    const el = document.getElementById('callTimer');
+    if (el) el.textContent = m + ':' + s;
+  }
+</script>
+</body>
+</html>

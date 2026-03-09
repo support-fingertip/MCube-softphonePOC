@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCube CTI Bridge — Salesforce Open CTI Adapter</title>
+
+  <!--
+    ══════════════════════════════════════════════════════════════════
+    Salesforce Open CTI JavaScript library.
+    This file is served automatically by Salesforce when the softphone
+    is loaded inside a Call Center. It will NOT exist when testing
+    locally — the callOpenCTI() helper below guards every call.
+    ══════════════════════════════════════════════════════════════════
+  -->
+  <script src="/support/api/61.0/lightning/opencti_min.js"></script>
+
+  <style>
+    /* ── Reset & base ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f1f3f4;
+      color: #202124;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Dark header ─────────────────────────────────────────────── */
+    header {
+      background: #202124;
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    header .title   { font-weight: 600; font-size: .95rem; }
+    header .sfbadge {
+      font-size: .7rem;
+      background: #1a73e8;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    /* ── Softphone iframe container ──────────────────────────────── */
+    .phone-container {
+      background: #fff;
+      border-bottom: 1px solid #dadce0;
+      flex-shrink: 0;
+    }
+
+    /* ── Debug / event log panel ─────────────────────────────────── */
+    .debug-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px 16px;
+      overflow: hidden;
+    }
+    .debug-panel h2 {
+      font-size: .85rem;
+      font-weight: 600;
+      color: #3c4043;
+      margin-bottom: 6px;
+    }
+    #debugLog {
+      flex: 1;
+      background: #202124;
+      color: #8ab4f8;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: .75rem;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 120px;
+      max-height: 280px;
+    }
+    .log-entry  { margin-bottom: 3px; }
+    .log-ts     { color: #5f6368; }
+    .log-cti    { color: #81c995; }   /* green for Open CTI calls */
+    .log-event  { color: #8ab4f8; }   /* blue for incoming events */
+    .log-warn   { color: #fdd663; }   /* yellow for warnings */
+
+    .clear-btn {
+      margin-top: 6px;
+      background: none;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: .75rem;
+      cursor: pointer;
+      color: #5f6368;
+      align-self: flex-start;
+    }
+    .clear-btn:hover { background: #f1f3f4; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="title">🔗 MCube CTI Bridge</span>
+  <span class="sfbadge" id="sfIndicator">⚡ Checking Salesforce…</span>
+</header>
+
+<!--
+  ══════════════════════════════════════════════════════════════════
+  Mock MCube softphone embedded as an iframe.
+
+  🔴 LIVE: Replace iframe src with MCube's real hosted softphone URL
+           e.g. src="https://softphone.mcube.in/agent?key=YOUR_KEY"
+  ══════════════════════════════════════════════════════════════════
+-->
+<div class="phone-container">
+  <iframe
+    id="mcube-frame"
+    src="../mock/mock_mcube_softphone.html"
+    allow="microphone"
+    style="width:100%;height:480px;border:none;"
+    title="MCube Softphone"
+  ></iframe>
+</div>
+
+<!-- Debug log panel — very useful for testing outside Salesforce -->
+<div class="debug-panel">
+  <h2>🪲 Debug Log &nbsp;<span style="font-weight:400;color:#5f6368;font-size:.75rem">(green = Open CTI call, blue = iframe event)</span></h2>
+  <div id="debugLog"><span style="color:#5f6368">// Bridge initialising…</span></div>
+  <button class="clear-btn" onclick="clearLog()">🗑 Clear</button>
+</div>
+
+<script>
+  // ════════════════════════════════════════════════════════════════
+  //  Helpers
+  // ════════════════════════════════════════════════════════════════
+
+  const iframe = document.getElementById('mcube-frame');
+
+  /**
+   * Safely calls a Salesforce Open CTI function.
+   * When the bridge is loaded outside Salesforce (e.g. local testing),
+   * `sforce` is not defined — so we log instead of crashing.
+   *
+   * @param {Function} fn - A function that receives the sforce object.
+   * @param {string}   description - Human-readable description for the debug log.
+   */
+  function callOpenCTI(fn, description) {
+    if (typeof sforce !== 'undefined' && sforce.opencti) {
+      try {
+        fn(sforce);
+        debugLog('🟢 OpenCTI → ' + description, 'cti');
+      } catch (err) {
+        debugLog('🔴 OpenCTI error (' + description + '): ' + err.message, 'warn');
+      }
+    } else {
+      // Outside Salesforce — just log what would have been called
+      debugLog('⚠ [No Salesforce] Would call: ' + description, 'warn');
+    }
+  }
+
+  /**
+   * Sends a postMessage to the embedded softphone iframe.
+   * @param {Object} payload
+   */
+  function messageIframe(payload) {
+    try {
+      iframe.contentWindow.postMessage(payload, '*');
+    } catch (e) {
+      debugLog('⚠ Could not message iframe: ' + e.message, 'warn');
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  postMessage listener — receive events from iframe softphone
+  // ════════════════════════════════════════════════════════════════
+
+  window.addEventListener('message', function (evt) {
+    const data = evt.data;
+    if (!data || !data.event) return;
+
+    debugLog('📨 Received from iframe → ' + JSON.stringify(data), 'event');
+
+    const callerNumber = data.callerNumber || '';
+    const callId       = data.callId       || '';
+    const status       = data.status       || '';
+
+    switch (data.event) {
+
+      // ── Incoming call: trigger Screen Pop ────────────────────────
+      case 'INCOMING_CALL':
+        callOpenCTI(function (sf) {
+          sf.opencti.searchAndScreenPop({
+            searchParams: callerNumber,
+            callType:     sf.opencti.CALL_TYPE.INBOUND,
+            deferred:     false
+          });
+        }, 'searchAndScreenPop(' + callerNumber + ')');
+        break;
+
+      // ── Call answered: update softphone panel label ───────────────
+      case 'CALL_ACCEPTED':
+        callOpenCTI(function (sf) {
+          sf.opencti.setSoftphonePanelLabel({
+            label: '📞 On Call: ' + callerNumber
+          });
+        }, 'setSoftphonePanelLabel(On Call: ' + callerNumber + ')');
+        break;
+
+      // ── Call rejected: save a task log ───────────────────────────
+      case 'CALL_REJECTED':
+        callOpenCTI(function (sf) {
+          sf.opencti.saveLog({
+            value: {
+              entityApiName: 'Task',
+              Subject:       'Rejected Call',
+              Status:        'Not Started',
+              CallType:      'Inbound'
+            }
+          });
+        }, 'saveLog(Rejected Call)');
+        break;
+
+      // ── Call ended: save log + refresh view ───────────────────────
+      case 'CALL_ENDED':
+        callOpenCTI(function (sf) {
+          sf.opencti.saveLog({
+            value: {
+              entityApiName:  'Task',
+              Subject:        'Completed Call with ' + callerNumber,
+              Status:         'Completed',
+              CallType:       'Inbound',
+              CallDurationInSeconds: data.duration || 0
+            }
+          });
+        }, 'saveLog(Completed Call: ' + callerNumber + ', duration=' + (data.duration || 0) + 's)');
+
+        callOpenCTI(function (sf) {
+          sf.opencti.refreshView();
+        }, 'refreshView()');
+        break;
+
+      // ── Agent status changed: update panel label ──────────────────
+      case 'AGENT_STATUS_CHANGED':
+        callOpenCTI(function (sf) {
+          sf.opencti.setSoftphonePanelLabel({
+            label: 'MCube | ' + status
+          });
+        }, 'setSoftphonePanelLabel(MCube | ' + status + ')');
+        break;
+
+      default:
+        debugLog('ℹ Unknown event from iframe: ' + data.event, 'warn');
+        break;
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  //  Open CTI initialisation (only runs when inside Salesforce)
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * Initialises click-to-dial and other Open CTI hooks.
+   * Called once the Open CTI library signals it is ready.
+   */
+  function initOpenCTI() {
+    debugLog('✅ Salesforce Open CTI ready', 'cti');
+    updateSFIndicator(true);
+
+    // Enable the click-to-dial feature in Salesforce UI
+    callOpenCTI(function (sf) {
+      sf.opencti.enableClickToDial();
+    }, 'enableClickToDial()');
+
+    // Listen for click-to-dial events and forward to iframe
+    callOpenCTI(function (sf) {
+      sf.opencti.onClickToDial(function (result) {
+        const number = result && (result.number || result.phoneNumber || '');
+        debugLog('🖱 Click-to-dial: ' + number, 'event');
+        messageIframe({ action: 'MAKE_CALL', number: number });
+      });
+    }, 'onClickToDial(listener)');
+  }
+
+  // ── Attempt to attach Open CTI listeners if sforce is available ──
+  if (typeof sforce !== 'undefined' && sforce.opencti) {
+    // The library loaded synchronously (e.g. cached)
+    initOpenCTI();
+  } else {
+    // The library may load asynchronously — poll briefly
+    let attempts = 0;
+    const check = setInterval(function () {
+      attempts++;
+      if (typeof sforce !== 'undefined' && sforce.opencti) {
+        clearInterval(check);
+        initOpenCTI();
+      } else if (attempts >= 20) {
+        clearInterval(check);
+        debugLog('ℹ Running outside Salesforce — Open CTI not available (POC mode)', 'warn');
+        updateSFIndicator(false);
+      }
+    }, 250);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  Debug log helpers
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * Appends a line to the debug log panel.
+   * @param {string} message
+   * @param {'cti'|'event'|'warn'} [type='event']
+   */
+  function debugLog(message, type) {
+    const log = document.getElementById('debugLog');
+
+    // Remove placeholder on first real entry
+    if (log.querySelector('span')) {
+      log.innerHTML = '';
+    }
+
+    const ts  = new Date().toLocaleTimeString();
+    const cls = type === 'cti' ? 'log-cti' : type === 'warn' ? 'log-warn' : 'log-event';
+
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + cls;
+    div.innerHTML = '<span class="log-ts">[' + ts + ']</span> ' + escapeHtml(message);
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /** Clears the debug log. */
+  function clearLog() {
+    document.getElementById('debugLog').innerHTML =
+      '<span style="color:#5f6368">// Log cleared.</span>';
+  }
+
+  /** Updates the Salesforce connectivity badge in the header. */
+  function updateSFIndicator(connected) {
+    const el = document.getElementById('sfIndicator');
+    if (connected) {
+      el.textContent = '✅ Salesforce Connected';
+      el.style.background = '#188038';
+    } else {
+      el.textContent = '⚠ POC Mode (no SF)';
+      el.style.background = '#f29900';
+      el.style.color = '#202124';
+    }
+  }
+
+  /** Minimal HTML escaping to prevent XSS in log display. */
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>

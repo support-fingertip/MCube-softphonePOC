@@ -82,20 +82,12 @@
         <name>EmailTemplate</name>
     </types>
 
-    <!--
-        NOTE: The following are intentionally EXCLUDED:
-        - Profile:*        → Too large, causes deploy failures
-        - Report:*         → Too many, causes timeouts
-        - Dashboard:*      → Too many, causes timeouts
-        - Queue:*          → Org-specific, rarely needed in source
-        - WorkflowRule:*   → Deprecated (use Flows instead)
-
-        To retrieve specific ones, add them individually:
-        <types>
-            <members>MySpecificProfile</members>
-            <name>Profile</name>
-        </types>
-    -->
+    <!-- ===== CTI / Telephony ===== -->
+    <!-- MCube Call Center definition -->
+    <types>
+        <members>MCubeSoftphonePOC</members>
+        <name>CallCenter</name>
+    </types>
 
     <version>62.0</version>
 </Package>
