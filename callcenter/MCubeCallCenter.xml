@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Salesforce Call Center definition for MCube CTI Adapter POC.
+
+  How to import:
+    1. In Salesforce Setup → Call Centers → Import
+    2. Select this file.
+    3. Edit the CTI Adapter URL to point to your actual Static Resource URL.
+    4. Assign users in the Call Center configuration.
+
+  After import, edit the CTI Adapter URL to point to your Static Resource.
+  Example:
+    https://mycompany.lightning.force.com/resource/MCubeBridge/bridge/mcube_bridge.html
+  Replace "mycompany" with your org's actual Lightning subdomain.
+-->
+<callCenter>
+  <section sortOrder="0" name="reqGeneralInfo" label="General Information">
+    <item sortOrder="0" name="reqInternalName"    label="Internal Name">MCubeSoftphonePOC</item>
+    <item sortOrder="1" name="reqDisplayName"     label="Display Name">MCube CTI Adapter POC</item>
+    <item sortOrder="2" name="reqAdapterUrl"      label="CTI Adapter URL">https://YOUR_SF_ORG.lightning.force.com/resource/MCubeBridge/bridge/mcube_bridge.html</item>
+    <item sortOrder="3" name="reqUseAPI"          label="Use CTI API">true</item>
+    <item sortOrder="4" name="reqSoftphoneHeight" label="Softphone Height">550</item>
+    <item sortOrder="5" name="reqSoftphoneWidth"  label="Softphone Width">320</item>
+  </section>
+  <section sortOrder="1" name="reqServerInfo" label="MCube Server Information">
+    <item sortOrder="0" name="reqServerURL" label="MCube API URL">https://api.mcube.in</item>
+  </section>
+</callCenter>
