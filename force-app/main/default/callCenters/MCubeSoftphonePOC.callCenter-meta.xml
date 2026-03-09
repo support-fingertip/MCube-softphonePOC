@@ -1,12 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CallCenter xmlns="http://soap.sforce.com/2006/04/metadata">
-    <adapterUrl>/resource/MCubeBridge/bridge/mcube_bridge.html</adapterUrl>
-    <contactRecordGroup>false</contactRecordGroup>
-    <customSettings>
-        <value>https://api.mcube.in</value>
-        <name>MCube API URL</name>
-    </customSettings>
     <displayName>MCube CTI Adapter POC</displayName>
     <internalName>MCubeSoftphonePOC</internalName>
-    <softphoneLayout>Default</softphoneLayout>
+    <sections>
+        <items>
+            <label>CTI Adapter URL</label>
+            <name>reqAdapterUrl</name>
+            <value>/resource/MCubeBridge/bridge/mcube_bridge.html</value>
+        </items>
+        <items>
+            <label>Use CTI API</label>
+            <name>reqUseAPI</name>
+            <value>true</value>
+        </items>
+        <items>
+            <label>Softphone Height</label>
+            <name>reqSoftphoneHeight</name>
+            <value>550</value>
+        </items>
+        <items>
+            <label>Softphone Width</label>
+            <name>reqSoftphoneWidth</name>
+            <value>320</value>
+        </items>
+        <label>General Information</label>
+        <name>reqGeneralInfo</name>
+        <sortOrder>0</sortOrder>
+    </sections>
+    <sections>
+        <items>
+            <label>MCube API URL</label>
+            <name>reqServerURL</name>
+            <value>https://api.mcube.in</value>
+        </items>
+        <label>MCube Server Information</label>
+        <name>reqServerInfo</name>
+        <sortOrder>1</sortOrder>
+    </sections>
+    <version>62.0</version>
 </CallCenter>
